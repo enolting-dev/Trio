@@ -60,15 +60,15 @@ def verify_trio_profile_entitlements(bundle_id, app_group_id)
     "#{ENV['HOME']}/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"
   ].flat_map { |pattern| Dir[pattern] }.uniq
   profile_path = profiles.find do |candidate|
-    candidate_app_id = sh("security cms -D -i #{Shellwords.escape(candidate)} | plutil -extract Entitlements:application-identifier raw - 2>/dev/null || true").strip
+    candidate_app_id = sh("security cms -D -i #{Shellwords.escape(candidate)} | plutil -extract Entitlements:application-identifier raw -o - - 2>/dev/null || true").strip
     candidate_app_id == "#{TEAMID}.#{bundle_id}"
   end
 
   UI.user_error!("Provisioning profile for '#{bundle_id}' was not installed by match") unless profile_path
 
   quoted_profile = Shellwords.escape(profile_path)
-  app_group = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.security.application-groups:0 raw - 2>/dev/null || true").strip
-  time_sensitive = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.developer.usernotifications.time-sensitive raw - 2>/dev/null || true").strip
+  app_group = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.security.application-groups:0 raw -o - - 2>/dev/null || true").strip
+  time_sensitive = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.developer.usernotifications.time-sensitive raw -o - - 2>/dev/null || true").strip
 
   UI.user_error!("Profile for '#{bundle_id}' is missing App Group '#{app_group_id}'. Assign that App Group to the App ID in Apple Developer, then regenerate profiles.") unless app_group == app_group_id
   UI.user_error!("Profile for '#{bundle_id}' is missing the time-sensitive-notifications entitlement. Enable the capability in Apple Developer, then regenerate profiles.") unless time_sensitive == 'true'
