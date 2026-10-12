@@ -54,23 +54,23 @@ ENV["BUNDLE_ID"] = xcconfig["BUNDLE_IDENTIFIER"]
 # Fail before the archive when Apple's generated profile is missing an
 # entitlement the project requires. This makes signing failures actionable
 # instead of burning a macOS build runner on xcodebuild exit 65.
-def verify_trio_profile_entitlements(profile_name, app_group_id)
+def verify_trio_profile_entitlements(bundle_id, app_group_id)
   profiles = Dir["#{ENV['HOME']}/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"]
   profile_path = profiles.find do |candidate|
-    candidate_name = sh("security cms -D -i #{Shellwords.escape(candidate)} | plutil -extract Name raw - 2>/dev/null || true").strip
-    candidate_name == profile_name
+    candidate_app_id = sh("security cms -D -i #{Shellwords.escape(candidate)} | plutil -extract Entitlements:application-identifier raw - 2>/dev/null || true").strip
+    candidate_app_id == "#{TEAMID}.#{bundle_id}"
   end
 
-  UI.user_error!("Provisioning profile '#{profile_name}' was not installed by match") unless profile_path
+  UI.user_error!("Provisioning profile for '#{bundle_id}' was not installed by match") unless profile_path
 
   quoted_profile = Shellwords.escape(profile_path)
   app_group = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.security.application-groups:0 raw - 2>/dev/null || true").strip
   time_sensitive = sh("security cms -D -i #{quoted_profile} | plutil -extract Entitlements:com.apple.developer.usernotifications.time-sensitive raw - 2>/dev/null || true").strip
 
-  UI.user_error!("Profile '#{profile_name}' is missing App Group '#{app_group_id}'. Assign that App Group to the App ID in Apple Developer, then regenerate profiles.") unless app_group == app_group_id
-  UI.user_error!("Profile '#{profile_name}' is missing the time-sensitive-notifications entitlement. Enable the capability in Apple Developer, then regenerate profiles.") unless time_sensitive == 'true'
+  UI.user_error!("Profile for '#{bundle_id}' is missing App Group '#{app_group_id}'. Assign that App Group to the App ID in Apple Developer, then regenerate profiles.") unless app_group == app_group_id
+  UI.user_error!("Profile for '#{bundle_id}' is missing the time-sensitive-notifications entitlement. Enable the capability in Apple Developer, then regenerate profiles.") unless time_sensitive == 'true'
 
-  UI.success("Verified App Group and time-sensitive-notification entitlements in '#{profile_name}'")
+  UI.success("Verified App Group and time-sensitive-notification entitlements in the '#{bundle_id}' profile")
 end
 
 # limit lane names to letters and underscores
@@ -120,7 +120,7 @@ platform :ios do
     ]
 
     verify_trio_profile_entitlements(
-      mapping["#{BUNDLE_ID}"],
+      BUNDLE_ID,
       "group.org.nightscout.#{TEAMID}.trio.trio-app-group"
     )
 
