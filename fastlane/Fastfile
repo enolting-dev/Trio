@@ -55,7 +55,10 @@ ENV["BUNDLE_ID"] = xcconfig["BUNDLE_IDENTIFIER"]
 # entitlement the project requires. This makes signing failures actionable
 # instead of burning a macOS build runner on xcodebuild exit 65.
 def verify_trio_profile_entitlements(bundle_id, app_group_id)
-  profiles = Dir["#{ENV['HOME']}/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"]
+  profiles = [
+    "#{ENV['HOME']}/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision",
+    "#{ENV['HOME']}/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"
+  ].flat_map { |pattern| Dir[pattern] }.uniq
   profile_path = profiles.find do |candidate|
     candidate_app_id = sh("security cms -D -i #{Shellwords.escape(candidate)} | plutil -extract Entitlements:application-identifier raw - 2>/dev/null || true").strip
     candidate_app_id == "#{TEAMID}.#{bundle_id}"
