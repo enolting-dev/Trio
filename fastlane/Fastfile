@@ -3,7 +3,6 @@
 #
 
 require 'shellwords'
-require 'tempfile'
 # For a list of all available actions, check out
 #
 #     https://docs.fastlane.tools/actions
@@ -52,43 +51,6 @@ xcconfig = parse_xcconfig_file(xcconfig_path)
 # Access BUNDLE_IDENTIFIER from the xcconfig file after replacing $(DEVELOPMENT_TEAM) with ENV["TEAMID"]
 ENV["BUNDLE_ID"] = xcconfig["BUNDLE_IDENTIFIER"]
 
-# Decode a CMS provisioning profile to a temporary plist before reading it.
-# Piping CMS output directly into plutil is unreliable on GitHub's macOS runner.
-def provisioning_profile_value(profile_path, keypath)
-  decoded = Tempfile.new(['trio-profile-', '.plist'])
-  decoded.close
-  decoded_path = Shellwords.escape(decoded.path)
-  profile = Shellwords.escape(profile_path)
-  sh("security cms -D -i #{profile} -o #{decoded_path}")
-  sh("plutil -extract #{Shellwords.escape(keypath)} raw -o - #{decoded_path} 2>/dev/null || true").strip
-ensure
-  decoded.unlink if decoded
-end
-
-# Fail before the archive when Apple's generated profile is missing an
-# entitlement the project requires. This makes signing failures actionable
-# instead of burning a macOS build runner on xcodebuild exit 65.
-def verify_trio_profile_entitlements(bundle_id, app_group_id)
-  profiles = [
-    "#{ENV['HOME']}/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision",
-    "#{ENV['HOME']}/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"
-  ].flat_map { |pattern| Dir[pattern] }.uniq
-  profile_path = profiles.find do |candidate|
-    candidate_app_id = provisioning_profile_value(candidate, 'Entitlements:application-identifier')
-    candidate_app_id == "#{TEAMID}.#{bundle_id}"
-  end
-
-  UI.user_error!("Provisioning profile for '#{bundle_id}' was not installed by match") unless profile_path
-
-  app_group = provisioning_profile_value(profile_path, 'Entitlements:com.apple.security.application-groups:0')
-  time_sensitive = provisioning_profile_value(profile_path, 'Entitlements:com.apple.developer.usernotifications.time-sensitive')
-
-  UI.user_error!("Profile for '#{bundle_id}' is missing App Group '#{app_group_id}'. Assign that App Group to the App ID in Apple Developer, then regenerate profiles.") unless app_group == app_group_id
-  UI.user_error!("Profile for '#{bundle_id}' is missing the time-sensitive-notifications entitlement. Enable the capability in Apple Developer, then regenerate profiles.") unless time_sensitive == 'true'
-
-  UI.success("Verified App Group and time-sensitive-notification entitlements in the '#{bundle_id}' profile")
-end
-
 # limit lane names to letters and underscores
 platform :ios do
   desc "Build Trio"
@@ -134,11 +96,6 @@ platform :ios do
     mapping = Actions.lane_context[
       SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
     ]
-
-    verify_trio_profile_entitlements(
-      BUNDLE_ID,
-      "group.org.nightscout.#{TEAMID}.trio.trio-app-group"
-    )
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Trio.xcodeproj",
